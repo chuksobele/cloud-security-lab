@@ -1,0 +1,46 @@
+// KQL queries against the Log Analytics workspace receiving the Activity Log.
+// Run these after streaming the Activity Log via a subscription diagnostic setting.
+
+// 1. Who has made role assignment changes in the last 30 days?
+AzureActivity
+| where TimeGenerated > ago(30d)
+| where OperationNameValue has "ROLEASSIGNMENTS/WRITE"
+| project TimeGenerated, Caller, CallerIpAddress, ActivityStatusValue, _ResourceId
+| order by TimeGenerated desc
+
+// 2. Resource deletions - useful for both incident response and change control
+AzureActivity
+| where TimeGenerated > ago(7d)
+| where OperationNameValue endswith "DELETE" and ActivityStatusValue == "Success"
+| summarize deletions = count() by Caller, ResourceGroup
+| order by deletions desc
+
+// 3. Any activity by the break-glass accounts (should be zero)
+SigninLogs
+| where TimeGenerated > ago(90d)
+| where UserPrincipalName has "breakglass"
+| project TimeGenerated, UserPrincipalName, IPAddress, Location, ResultType, AppDisplayName
+
+// 4. Password spraying signature - one source IP failing against many accounts
+SigninLogs
+| where TimeGenerated > ago(1h)
+| where ResultType == "50126"
+| summarize distinct_users = dcount(UserPrincipalName), attempts = count() by IPAddress
+| where distinct_users > 10
+| order by distinct_users desc
+
+// 5. Legacy authentication still succeeding (should be zero after CA02)
+SigninLogs
+| where TimeGenerated > ago(30d)
+| where ClientAppUsed in ("Other clients", "IMAP4", "POP3", "SMTP", "Exchange ActiveSync")
+| where ResultType == 0
+| summarize count() by UserPrincipalName, ClientAppUsed
+
+// 6. Sign-ins without MFA satisfied, for privileged roles
+SigninLogs
+| where TimeGenerated > ago(7d)
+| where ResultType == 0
+| mv-expand AuthenticationDetails = todynamic(AuthenticationDetails)
+| extend method = tostring(AuthenticationDetails.authenticationMethod)
+| where method == "Password"
+| summarize methods = make_set(method) by UserPrincipalName

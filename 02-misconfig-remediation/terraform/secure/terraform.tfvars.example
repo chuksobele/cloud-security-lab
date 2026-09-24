@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars (which is gitignored) and set your own values.
+# Never commit a real CIDR that identifies your home address precisely; a /32 of
+# your public IP is fine for a lab but do not publish it.
+allowed_source_cidr = "203.0.113.0/24"
+location            = "uksouth"
+prefix              = "seclab"

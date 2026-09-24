@@ -1,0 +1,17 @@
+# Allow exactly one path: pods labelled app=frontend inside tenant-a may reach
+# app=api inside tenant-a on port 8080. Nothing else, and nothing cross-tenant.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-api
+  namespace: tenant-a
+spec:
+  podSelector:
+    matchLabels: { app: api }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: frontend }
+      ports:
+        - { protocol: TCP, port: 8080 }

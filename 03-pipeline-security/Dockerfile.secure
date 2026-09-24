@@ -1,0 +1,31 @@
+# Hardened equivalent.
+#   1. Current slim base, pinned by minor version
+#   2. Multi-stage build: build tooling never reaches the final image
+#   3. Non-root user with a fixed high UID (works with Kubernetes runAsNonRoot)
+#   4. No secrets in the image; injected at runtime from Key Vault
+#   5. Healthcheck so the orchestrator can tell live from wedged
+
+FROM python:3.12-slim AS build
+WORKDIR /build
+COPY app.py .
+# (Dependency install would happen here; kept minimal for the lab.)
+
+FROM python:3.12-slim
+
+RUN groupadd --gid 10001 appgroup \
+ && useradd --uid 10001 --gid appgroup --no-create-home --shell /usr/sbin/nologin appuser \
+ && apt-get update \
+ && apt-get upgrade -y \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=build --chown=10001:10001 /build/app.py /app/app.py
+
+USER 10001:10001
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080').status==200 else 1)"
+
+CMD ["python", "app.py"]

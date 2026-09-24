@@ -1,0 +1,20 @@
+# DELIBERATELY INSECURE - baseline for comparison. Do not use as a template.
+# Problems, in order of severity:
+#   1. Old, full-fat base image: hundreds of OS package CVEs
+#   2. Runs as root: a container escape starts with root on the host namespace
+#   3. Hardcoded secret in an ENV: visible in `docker history` to anyone with the image
+#   4. Build tooling left in the final image: unnecessary attack surface
+#   5. `latest`-style floating tag: builds are not reproducible
+FROM python:3.8-buster
+
+ENV API_KEY="sk-live-not-a-real-key-but-this-is-how-they-leak"
+
+RUN apt-get update && apt-get install -y \
+    curl wget git build-essential netcat \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY app.py /app/app.py
+WORKDIR /app
+
+EXPOSE 8080
+CMD ["python", "app.py"]
